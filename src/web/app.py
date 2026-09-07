@@ -63,7 +63,7 @@ def create_app(*, start_poller: bool = True) -> Flask:
 
     @app.get("/")
     def home() -> ResponseReturnValue:
-        """Find My is the only page, so the root goes straight to it."""
+        """The nav is the only index the shell needs, so the root just opens the first page."""
         return redirect(url_for("findmy.page"))
 
     @app.get("/dashboard")

@@ -34,6 +34,5 @@ NAV_ITEMS = (
         label="Photos",
         endpoint="photos.page",
         icon="image",
-        summary="The iCloud media backed up to the external drive, filterable by camera, date and size.",
     ),
 )
