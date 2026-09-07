@@ -66,6 +66,19 @@ input:focus-visible {
   color: var(--color-white);
 }
 
+/* For the one button on the page that deletes. It reads as an ordinary
+   floating button until it is the thing about to be pressed. */
+.btn-danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
+.btn-danger:hover {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #ffffff;
+}
+
 .btn-icon {
   padding: 0;
   width: var(--toolbar-height);
@@ -353,17 +366,6 @@ input:focus-visible {
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-5) var(--space-4);
-}
-
-.page-inner {
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.page-title {
-  margin: 0 0 var(--space-5);
-  font-size: 1.5rem;
-  font-weight: 600;
 }
 
 @media (max-width: 640px) {
