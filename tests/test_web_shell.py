@@ -8,6 +8,7 @@ import re
 
 import src.web.app as app_module
 import src.web.tiles as tiles
+from src.web.nav import NAV_ITEMS
 
 
 def _current_nav_link(body: str) -> str | None:
