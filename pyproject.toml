@@ -142,3 +142,6 @@ spyglass = { git = "https://github.com/momonala/spyglass.git", rev = "main" }
 
 [tool.uv]
 exclude-newer = "1 week"
+
+[tool.deploy]
+secrets = [".env", ".icloud_session/"]
