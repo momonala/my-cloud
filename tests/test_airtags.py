@@ -299,3 +299,40 @@ def test_dropped_provider_is_not_referenced_elsewhere(monkeypatch):
     gc.collect()
 
     assert witness() is None
+
+
+# ------------------------------------------------------ account state save ----
+
+
+class _StubAccount:
+    state: dict = {}
+
+    def __init__(self, _provider, state_info):  # noqa: ARG002 -- mirrors AsyncAppleAccount
+        pass
+
+    def to_json(self):
+        return _StubAccount.state
+
+    async def close(self):
+        pass
+
+
+@pytest.mark.parametrize("refreshed", [_STATE, {**_STATE, "login": "renewed"}])
+def test_locate_rewrites_account_file_only_when_state_changed(monkeypatch, tmp_path, refreshed):
+    account_file = tmp_path / "findmy_account.json"
+    account_file.write_text(airtags.json.dumps(_STATE, indent=4))
+    before_inode = account_file.stat().st_ino
+
+    async def _locate_nothing(_accessories, _account):
+        return {}
+
+    _StubAccount.state = refreshed
+    monkeypatch.setattr(airtags, "_ACCOUNT_FILE", account_file)
+    monkeypatch.setattr(airtags, "AsyncAppleAccount", _StubAccount)
+    monkeypatch.setattr(airtags, "locate_accessories", _locate_nothing)
+    monkeypatch.setattr(airtags, "_get_anisette_provider", lambda _state: None)
+
+    airtags._get_event_loop().run_until_complete(airtags._locate([]))
+
+    assert airtags.json.loads(account_file.read_text()) == refreshed
+    assert (account_file.stat().st_ino == before_inode) == (refreshed is _STATE)

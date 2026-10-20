@@ -43,6 +43,8 @@ from src.core.errors import InteractiveAuthRequiredError
 from src.core.errors import TwoFactorRejectedError
 from src.core.errors import UnsupportedPlatformError
 from src.core.paths import SESSION_DIR
+from src.core.ram_files import RamMirror
+from src.core.ram_files import write_atomic
 from src.findmy.batch_reports import locate_accessories
 from src.findmy.db import load_tracker_alignment
 from src.findmy.db import save_tracker_alignment
@@ -54,6 +56,7 @@ logger = logging.getLogger(__name__)
 
 _ACCOUNT_FILE = SESSION_DIR / "findmy_account.json"
 _ANISETTE_LIBS = SESSION_DIR / "ani_libs.bin"
+_anisette_libs = RamMirror(SESSION_DIR, "anisette", (_ANISETTE_LIBS.name,), overwrite=False)
 # Holds each tracker's master key in plaintext, so it stays owner-read-only and
 # inside the git-ignored session directory. Anyone with this file can locate
 # these trackers; delete it to fall back to reading the Keychain. Read-only on
@@ -290,7 +293,8 @@ def _get_anisette_provider(state: dict[str, Any]) -> LocalAnisetteProvider:
         _anisette_uses = 0
         gc.collect()
     if _anisette_provider is None:
-        _anisette_provider = LocalAnisetteProvider.from_json(state["anisette"], libs_path=_ANISETTE_LIBS)
+        libs_path = _anisette_libs.open() / _ANISETTE_LIBS.name
+        _anisette_provider = LocalAnisetteProvider.from_json(state["anisette"], libs_path=libs_path)
     _anisette_uses += 1
     return _anisette_provider
 
@@ -298,17 +302,21 @@ def _get_anisette_provider(state: dict[str, Any]) -> LocalAnisetteProvider:
 async def _locate(
     accessories: list[FindMyAccessory],
 ) -> dict[FindMyAccessory, LocationReport | None]:
-    """Locate accessories over a restored session, saving refreshed session state.
+    """Locate accessories over a restored session, saving session state if it changed.
 
     The saved Anisette provisioning state has to be restored alongside the
     session — building a fresh provider makes Apple reject the requests and
     demand 2FA again.
     """
-    state = json.loads(_ACCOUNT_FILE.read_text())
+    saved = _ACCOUNT_FILE.read_text()
+    state = json.loads(saved)
     account = AsyncAppleAccount(_get_anisette_provider(state), state_info=state)
     try:
         locations = await locate_accessories(accessories, account)
-        account.to_json(_ACCOUNT_FILE)
+        refreshed = json.dumps(account.to_json(), indent=4)
+        if refreshed != saved:
+            write_atomic(_ACCOUNT_FILE, refreshed.encode())
+        _anisette_libs.flush()
         return locations
     finally:
         await account.close()

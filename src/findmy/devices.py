@@ -5,7 +5,9 @@ location. AirTags and third-party trackers are not served by this API at all;
 see src/findmy/airtags.py for those.
 
 Authenticates via pyicloud, prompting for a 2FA code on first run. Session
-cookies are cached in .icloud_session/ so later runs skip verification.
+cookies are cached in .icloud_session/ so later runs skip verification. pyicloud
+works on a RAM copy of them (see src/core/ram_files.py), written back at most
+hourly, on shutdown, and straight after a 2FA login.
 """
 
 import sys
@@ -22,6 +24,7 @@ from src.core.errors import InteractiveAuthRequiredError
 from src.core.errors import LoginFailedError
 from src.core.errors import TwoFactorRejectedError
 from src.core.paths import SESSION_DIR
+from src.core.ram_files import RamMirror
 from src.findmy.tracking import Location
 from src.findmy.tracking import TrackedItem
 from src.findmy.tracking import require_credentials
@@ -31,6 +34,10 @@ from src.findmy.tracking import require_credentials
 # a background thread at this interval, so leaving it at pyicloud's five-minute
 # default would have the poller rewriting the same stale fix for five cycles.
 _DEVICE_REFRESH_SECONDS = 60
+
+_session_files = RamMirror(
+    SESSION_DIR, "pyicloud", ("*.cookiejar", "*.session"), flush_interval_seconds=60 * 60
+)
 
 _api: PyiCloudService | None = None
 
@@ -50,7 +57,7 @@ def _authenticate() -> PyiCloudService:
         api = PyiCloudService(
             username,
             password,
-            cookie_directory=str(SESSION_DIR),
+            cookie_directory=str(_session_files.open()),
             refresh_interval=_DEVICE_REFRESH_SECONDS,
             # Apple blocks login until updated iCloud terms are accepted, and the
             # headless poller has no one to click through them.
@@ -70,6 +77,7 @@ def _authenticate() -> PyiCloudService:
             raise TwoFactorRejectedError("2FA code was not accepted.")
         if not api.is_trusted_session:
             api.trust_session()
+        _session_files.flush()
 
     return api
 
@@ -134,7 +142,9 @@ def fetch_devices() -> list[TrackedItem]:
     the poller until the process was restarted.
     """
     try:
-        return _collect_devices(_get_api())
+        devices = _collect_devices(_get_api())
     except PyiCloudAuthRequiredException:
         _discard_api()
-        return _collect_devices(_get_api())
+        devices = _collect_devices(_get_api())
+    _session_files.maybe_flush()
+    return devices

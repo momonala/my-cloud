@@ -5,6 +5,8 @@ Presentation lives here; src/findmy/devices.py and src/findmy/airtags.py just re
 """
 
 import logging
+import signal
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -103,6 +105,7 @@ def serve_command(
     from src.web.app import create_app
 
     _configure_server_logging()
+    _exit_cleanly_on_sigterm()
     create_app(start_poller=poll).run(host=host, port=port)
 
 
@@ -117,6 +120,7 @@ def poll_command() -> None:
     from src.findmy.poller import run_forever
 
     _configure_server_logging()
+    _exit_cleanly_on_sigterm()
     init_db()
     stop_event = threading.Event()
     try:
@@ -150,6 +154,11 @@ def _configure_server_logging() -> None:
     # duplicating src.findmy.poller's single per-cycle summary; only its
     # warnings/errors matter here.
     logging.getLogger("pyicloud").setLevel(logging.WARNING)
+
+
+def _exit_cleanly_on_sigterm() -> None:
+    """Turn systemd's SIGTERM into a normal exit, so atexit handlers flush RAM session files to disk."""
+    signal.signal(signal.SIGTERM, lambda _signum, _frame: sys.exit(0))
 
 
 def _prepare_keychain_access(refresh_keys: bool) -> None:
