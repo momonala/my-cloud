@@ -8,6 +8,9 @@ WorkingDirectory=/home/mnalavadi/my-cloud
 Type=idle
 ExecStart=/home/mnalavadi/.local/bin/uv run mycloud serve
 User=mnalavadi
+# tmpfs for session files that libraries rewrite constantly; see src/core/ram_files.py.
+RuntimeDirectory=my-cloud
+RuntimeDirectoryMode=0700
 
 # The poller handles its own exceptions, so an exit means something it could
 # not recover from.
