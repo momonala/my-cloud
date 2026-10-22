@@ -1,7 +1,6 @@
 # my-cloud
 
 [![CI](https://github.com/momonala/my-cloud/actions/workflows/ci.yml/badge.svg)](https://github.com/momonala/my-cloud/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/momonala/my-cloud/branch/main/graph/badge.svg)](https://codecov.io/gh/momonala/my-cloud)
 
 Command-line access to Apple's Find My data: locations for iCloud devices and for AirTags, with distance from a
 configured home point.
