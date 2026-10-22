@@ -8,19 +8,19 @@ readme = "README.md"
 # so 3.14 falls back to a Rust build that fails. Relax once wheels ship.
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "typer>=0.9.0",
-    "python-dotenv>=1.0.0",
-    "flask>=3.0.0",
-    "pyicloud>=2.6.5",
-    "requests>=2.32.0",
+    "typer>=0.27.3",
+    "python-dotenv>=1.2.4",
+    "flask>=3.1.3",
+    "pyicloud>=2026.10.0",
+    "requests>=2.34.2",
     # Both also arrive transitively (pydantic via pyicloud, rich via typer), but
     # src/maps/google_tiles.py and src/findmy/tracking.py import them directly and a
     # transitive dependency is not a contract.
-    "pydantic>=2.0.0",
-    "rich>=13.0.0",
+    "pydantic>=2.14.1",
+    "rich>=15.0.0",
     # Disk cache for proxied Google map tiles (src/maps/google_tiles.py), which are
     # billed per request.
-    "joblib>=1.3.0",
+    "joblib>=1.6.0",
     # Pinned exactly: src/findmy/batch_reports.py drives semi-internal APIs
     # (fetch_raw_reports, LocationReport.decrypt, update_alignment) that this
     # reverse-engineered library can change in a patch release.
@@ -30,19 +30,19 @@ dependencies = [
     # by src/core/db.py's init_db() on every boot. sqlalchemy is Alembic's own
     # dependency; the app itself still talks to sqlite directly (src/core/db.py's
     # get_connection/connection), not through sqlalchemy.
-    "alembic>=1.13.0",
-    "sqlalchemy>=2.0.0",
+    "alembic>=1.20.0",
+    "sqlalchemy>=2.1.4",
 ]
 
 # Test and lint tooling only -- `uv sync --no-dev` on the deploy target installs
 # none of this. test-and-lint.sh and .github/workflows/ci.yml drive these.
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.0.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
     "black",
-    "ruff>=0.14.10",
-    "mypy>=1.11.0",
+    "ruff>=0.17.0",
+    "mypy>=2.4.0",
 ]
 
 [tool.config]
@@ -142,6 +142,7 @@ spyglass = { git = "https://github.com/momonala/spyglass.git", rev = "main" }
 
 [tool.uv]
 exclude-newer = "1 week"
+exclude-newer-package = { certifi = false }
 
 [tool.deploy]
 secrets = [".env", ".icloud_session/"]
