@@ -40,7 +40,6 @@ from icloud_photo_metadata.library import BackedUpFile
 from icloud_photo_metadata.queries import DRIVE
 from icloud_photo_metadata.queries import EVERYWHERE
 
-
 # Which copies each mark takes. Every deletion below asks one of these rather
 # than naming a mark, so the third one did not need a branch of its own.
 _TAKES_ICLOUD = (queries.ICLOUD, EVERYWHERE)
