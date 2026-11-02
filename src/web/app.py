@@ -25,6 +25,8 @@ from src.web import tiles
 from src.web.findmy import api as findmy_api
 from src.web.findmy import pages as findmy_pages
 from src.web.nav import NAV_ITEMS
+from src.web.photos import api as photos_api
+from src.web.photos import pages as photos_pages
 
 
 def create_app(*, start_poller: bool = True) -> Flask:
@@ -44,6 +46,8 @@ def create_app(*, start_poller: bool = True) -> Flask:
     app.register_blueprint(tiles.bp)
     app.register_blueprint(findmy_pages.bp)
     app.register_blueprint(findmy_api.bp)
+    app.register_blueprint(photos_pages.bp)
+    app.register_blueprint(photos_api.bp)
 
     if start_poller:
         stop_event = start_background_poller()
@@ -59,7 +63,7 @@ def create_app(*, start_poller: bool = True) -> Flask:
 
     @app.get("/")
     def home() -> ResponseReturnValue:
-        """Find My is the only page, so the root goes straight to it."""
+        """The nav is the only index the shell needs, so the root just opens the first page."""
         return redirect(url_for("findmy.page"))
 
     @app.get("/dashboard")

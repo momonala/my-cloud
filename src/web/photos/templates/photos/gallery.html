@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon with context %}
+{% block title %}Photos{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('photos.static', filename='photos.css') }}">
+{% endblock %}
+
+{% block content %}
+<main class="page photos-page">
+  {#- The nav bar names the page; this keeps the document outline intact. -#}
+  <h1 class="visually-hidden">Photos</h1>
+  {#- Every count on one line: the library, then where its bytes actually are,
+      then what the filters narrowed it to. The filtered figure is the one a
+      click moves, so it sits last and reads loudest. -#}
+  <div class="photos-counts">
+    <p id="library-summary" class="photos-count-set" hidden></p>
+    <p id="result-count" class="photos-count-set photos-count-match" role="status" hidden></p>
+  </div>
+
+  {#- One row: every filter, then the two buttons that change the library
+      rather than the view of it. Those stay outside the form -- nothing they
+      do belongs in the query string -- and only share its line. -#}
+  <div class="photos-toolbar">
+    {#- No labels: each control's resting option says what it filters, and
+        shows the chosen value once there is one. -#}
+    <form id="filters" class="photos-filters" aria-label="Filter the library">
+      <select name="camera" class="dialog-select filter-control" aria-label="Camera">
+        <option value="">Camera (any)</option>
+      </select>
+      <select name="year" class="dialog-select filter-control" aria-label="Year">
+        <option value="">Year (any)</option>
+      </select>
+      <select name="album" class="dialog-select filter-control" aria-label="Album">
+        <option value="">Album (any)</option>
+      </select>
+      <select name="type" class="dialog-select filter-control" aria-label="Kind">
+        <option value="">Kind (any)</option>
+      </select>
+      <select name="min_bytes" class="dialog-select filter-control" aria-label="Minimum file size">
+        <option value="">Any size</option>
+        <option value="1000000">1 MB or more</option>
+        <option value="5000000">5 MB or more</option>
+        <option value="10000000">10 MB or more</option>
+        <option value="20000000">20 MB or more</option>
+      </select>
+      <select name="min_duration" class="dialog-select filter-control" aria-label="Minimum video length">
+        <option value="">Any length</option>
+        <option value="5">5s or longer</option>
+        <option value="30">30s or longer</option>
+        <option value="60">1m or longer</option>
+      </select>
+      <select name="sort" class="dialog-select filter-control" aria-label="Sort order">
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="largest">Largest first</option>
+        <option value="smallest">Smallest first</option>
+        <option value="longest">Longest video</option>
+      </select>
+      <select id="per-row" class="dialog-select filter-control" aria-label="Images per row">
+        <option value="4">4 per row</option>
+        <option value="6">6 per row</option>
+        <option value="8" selected>8 per row</option>
+        <option value="10">10 per row</option>
+        <option value="12">12 per row</option>
+        <option value="16">16 per row</option>
+      </select>
+      <select name="mark" class="dialog-select filter-control" aria-label="Marked to delete from">
+        <option value="">Delete from (any)</option>
+        <option value="any">Marked, any location</option>
+        <option value="icloud">Marked: iCloud only</option>
+        <option value="drive">Marked: local only</option>
+        <option value="everywhere">Marked: local + iCloud</option>
+      </select>
+    </form>
+
+    <div class="photos-toolbar-actions">
+      <button type="button" id="prune" class="btn-floating btn-danger" hidden></button>
+      <button type="button" id="refresh" class="btn-floating btn-icon"
+              title="Pull new photos from iCloud" aria-label="Pull new photos from iCloud">
+        {{ icon("refresh", "refresh-icon") }}
+      </button>
+    </div>
+  </div>
+
+  <ul id="grid" class="photo-grid" aria-busy="false"></ul>
+
+  {#- Cloned onto every tile so the kind of an asset, and where its bytes still
+      are, read from the grid itself. Templates rather than SVG built in JS, so
+      the page keeps one icon mechanism: the same macro the toolbar draws from. -#}
+  <template id="kind-badge-movie">
+    <span class="photo-badge" title="Video">{{ icon("play", "photo-badge-icon") }}</span>
+  </template>
+  <template id="kind-badge-image">
+    <span class="photo-badge" title="Photo">{{ icon("camera", "photo-badge-icon") }}</span>
+  </template>
+  {#- The cloud is iCloud's copy, the house the drive's. Struck through and red
+      is a copy that is not there, which is the whole point of the pair: an
+      asset down to one copy is the one to think twice about deleting. -#}
+  <template id="state-badge-icloud-on">
+    <span class="photo-badge is-present" title="In iCloud">{{ icon("cloud", "photo-badge-icon") }}</span>
+  </template>
+  <template id="state-badge-icloud-off">
+    <span class="photo-badge is-absent" title="Not in iCloud">{{ icon("cloud-off", "photo-badge-icon") }}</span>
+  </template>
+  <template id="state-badge-local-on">
+    <span class="photo-badge is-present" title="On this drive">{{ icon("house", "photo-badge-icon") }}</span>
+  </template>
+  <template id="state-badge-local-off">
+    <span class="photo-badge is-absent" title="Not on this drive">{{ icon("house-off", "photo-badge-icon") }}</span>
+  </template>
+
+  <div class="grid-footer">
+    <button type="button" id="load-more" class="btn-floating" hidden>Show more</button>
+    <p id="grid-empty" class="photos-summary" hidden>Nothing matches those filters.</p>
+  </div>
+</main>
+
+{#- A prune deletes from Apple's servers, so it asks first and says exactly
+    what it is about to take -- as a list of the assets themselves, not just a
+    count, because the last chance to change your mind is worth spending a
+    scroll on. Every row carries the same two toggles the detail panel does, so
+    a decision can be adjusted or dropped without leaving the queue. -#}
+<dialog id="prune-confirm" class="app-dialog prune-confirm" aria-labelledby="prune-confirm-title">
+  <h2 id="prune-confirm-title">Queued for deletion</h2>
+  <ul id="prune-confirm-lines" class="prune-lines"></ul>
+  <ul id="prune-queue" class="prune-queue"></ul>
+  <p id="prune-queue-empty" class="photos-summary" hidden>Nothing is queued.</p>
+  <p class="photos-summary">
+    What is deleted from iCloud goes to Recently Deleted, where Apple keeps it for 30 days. What is
+    deleted from <strong>local</strong> leaves the drive for good, which nothing can undo.
+  </p>
+  <p class="photos-summary">
+    An asset marked <strong>iCloud only</strong> is skipped unless the drive's copy still hashes to what
+    was recorded, and one marked <strong>local only</strong> is skipped unless iCloud still holds it. Both
+    stay marked, so they are picked up once that is fixed.
+  </p>
+  <div class="detail-buttons">
+    <button type="button" id="prune-cancel" class="btn-floating">Cancel</button>
+    <button type="button" id="prune-go" class="btn-floating btn-danger">Delete</button>
+  </div>
+</dialog>
+
+{#- One queued asset. A template rather than markup built in JS, so the row
+    reads as markup and the two toggles stay the same control the detail panel
+    uses -- same class, same `data-target`, same pressed state. -#}
+<template id="prune-queue-row">
+  <li class="prune-queue-row">
+    <img class="prune-queue-thumb" alt="" loading="lazy">
+    <span class="prune-queue-name"></span>
+    <span class="prune-queue-facts photos-summary"></span>
+    <div class="detail-marks" role="group" aria-label="Delete from">
+      <button type="button" class="btn-floating detail-mark" data-target="icloud" aria-pressed="false"
+              title="Delete the iCloud copy">iCloud</button>
+      <button type="button" class="btn-floating detail-mark" data-target="drive" aria-pressed="false"
+              title="Delete the copy on the backup drive">Local</button>
+    </div>
+  </li>
+</template>
+
+<dialog id="detail" class="app-dialog photo-detail" aria-labelledby="detail-title">
+  <header class="detail-header">
+    <h2 id="detail-title"></h2>
+    <div class="detail-buttons">
+      {#- Named as the two places the bytes sit rather than as severity levels,
+          because where a copy is deleted from is the decision being made. The
+          two toggle independently and every combination is a mark the library
+          stores: iCloud, drive, or everywhere. The drive's copy is the one that
+          cannot be undeleted. -#}
+      <div class="detail-marks" role="group" aria-label="Delete from">
+        <span class="detail-marks-label">Delete from:</span>
+        <button type="button" class="btn-floating detail-mark" data-target="icloud" aria-pressed="false"
+                title="Delete the iCloud copy">iCloud</button>
+        <button type="button" class="btn-floating detail-mark" data-target="drive" aria-pressed="false"
+                title="Delete the copy on the backup drive">Local</button>
+      </div>
+      <button type="button" id="detail-close" class="btn-floating">Close</button>
+    </div>
+  </header>
+  {#- A movie gets the player and a photo gets the image; whichever is not in
+      use is hidden, so the figure never holds two things at once. The player's
+      poster is the same frame the grid tile shows, which is already cached by
+      the time anyone opens the tile it came from. -#}
+  <figure class="detail-figure">
+    <img id="detail-image" alt="">
+    <video id="detail-video" controls playsinline preload="metadata" hidden></video>
+    {#- A .MOV off a recent iPhone is HEVC, which not every browser decodes.
+        The element's own fallback content only shows where `<video>` itself is
+        unsupported, so a codec it cannot read needs saying here. -#}
+    <p id="detail-video-error" class="photo-placeholder" hidden>
+      This browser cannot play this file.
+    </p>
+  </figure>
+  <div id="detail-meta" class="detail-meta"></div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('photos.static', filename='gallery.js') }}"></script>
+{% endblock %}

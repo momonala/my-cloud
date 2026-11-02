@@ -32,6 +32,20 @@ dependencies = [
     # get_connection/connection), not through sqlalchemy.
     "alembic>=1.20.0",
     "sqlalchemy>=2.1.4",
+    "tqdm>=4.70.1",
+    "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
+]
+# icloud_photo_metadata/ only -- a local backup tool the service never runs.
+# Deliberately absent from `default-groups`, so install/install.sh's plain
+# `uv sync` leaves it off the deploy target. Run the tool with
+# `uv run --group photos python -m icloud_photo_metadata ...`.
+photos = [
+    "tqdm>=4.66.0",
+    # The gallery resizes originals on request; 76% of the library is HEIC,
+    # which browsers other than Safari will not render.
+    "pillow>=10.0.0",
+    "pillow-heif>=0.16.0",
 ]
 
 [tool.config]
@@ -101,7 +115,7 @@ mypy_path = "."
 
 [[tool.mypy.overrides]]
 # None of these ship type stubs or a py.typed marker.
-module = ["pyicloud.*", "findmy.*", "requests.*", "spyglass.*", "joblib.*"]
+module = ["pyicloud.*", "findmy.*", "requests.*", "spyglass.*", "tqdm.*", "joblib.*", "pillow_heif.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -110,10 +124,10 @@ python_files = ["test_*.py"]
 # Coverage runs on every invocation (CI, test-and-lint.sh, and local
 # pytest runs) so all three stay in sync; capture stays on so a stray print can't
 # corrupt output. Codecov upload in CI needs the xml report specifically.
-addopts = "-q --cov=src --cov-report=term-missing --cov-report=xml"
+addopts = "-q --cov --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "icloud_photo_metadata"]
 omit = ["tests/*", "*/test_*.py"]
 
 [tool.coverage.report]

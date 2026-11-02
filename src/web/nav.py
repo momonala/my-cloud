@@ -29,4 +29,10 @@ NAV_ITEMS = (
         endpoint="findmy.page",
         icon="pin",
     ),
+    NavItem(
+        slug="photos",
+        label="Photos",
+        endpoint="photos.page",
+        icon="image",
+    ),
 )
