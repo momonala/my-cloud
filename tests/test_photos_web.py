@@ -18,8 +18,8 @@ from flask.testing import FlaskClient
 from PIL import Image
 
 from icloud_photo_metadata import library
-from icloud_photo_metadata import queries
 from icloud_photo_metadata import prune as photos_prune
+from icloud_photo_metadata import queries
 from icloud_photo_metadata.backup import Download
 from icloud_photo_metadata.backup import MetadataPullFailed
 from icloud_photo_metadata.backup import Outcome
@@ -435,9 +435,7 @@ def test_the_gallery_leaves_apples_trash_out_until_it_is_asked_for(client: Flask
     assert client.get("/api/photos/assets?album=Recently+Deleted").get_json()["total"] == 1
 
 
-def test_an_asset_gone_from_both_places_takes_no_slot_in_the_grid(
-    client: FlaskClient, drive: Path
-) -> None:
+def test_an_asset_gone_from_both_places_takes_no_slot_in_the_grid(client: FlaskClient, drive: Path) -> None:
     """After an `everywhere` prune there is nothing left to draw or to delete.
 
     The row stays in the library, which is the only record the photo existed.

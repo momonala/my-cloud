@@ -264,7 +264,11 @@ def _print_prune_plan(plan: pruning.PrunePlan) -> None:
         targets = [target for target in plan.ready if target.mark == mark]
         if not targets:
             continue
-        drive = sum(target.drive_bytes for target in targets) if mark in (queries.DRIVE, queries.EVERYWHERE) else 0
+        drive = (
+            sum(target.drive_bytes for target in targets)
+            if mark in (queries.DRIVE, queries.EVERYWHERE)
+            else 0
+        )
         icloud = sum(
             target.icloud_bytes
             for target in targets

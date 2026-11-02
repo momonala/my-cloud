@@ -338,6 +338,8 @@ def test_locate_rewrites_account_file_only_when_state_changed(monkeypatch, tmp_p
 
     assert airtags.json.loads(account_file.read_text()) == refreshed
     assert (account_file.stat().st_ino == before_inode) == (refreshed is _STATE)
+
+
 # --------------------------------------------- The device identity Apple issues ----
 
 
