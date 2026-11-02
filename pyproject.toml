@@ -32,6 +32,9 @@ dependencies = [
     # get_connection/connection), not through sqlalchemy.
     "alembic>=1.20.0",
     "sqlalchemy>=2.1.4",
+    "tqdm>=4.70.1",
+    "pillow>=13.0.0",
+    "pillow-heif>=1.8.1",
 ]
 # icloud_photo_metadata/ only -- a local backup tool the service never runs.
 # Deliberately absent from `default-groups`, so install/install.sh's plain
