@@ -57,18 +57,11 @@ packages = ["src"]
 config = "src.core.config:main"
 mycloud = "src.cli:main"
 
-[tool.black]
-line-length = 110
-target-version = ['py313']
-include = '\.pyi?$'
-
 [tool.ruff]
 line-length = 110
-target-version = "py313"
 
 [tool.ruff.lint]
-# black owns formatting, so this is lint-only. `I` with force-single-line keeps
-# the one-import-per-line style the codebase already uses.
+# `I` with force-single-line keeps the one-import-per-line style the codebase already uses.
 select = ["E", "F", "I", "B", "UP", "SIM", "A", "G", "PTH", "RET", "ARG"]
 ignore = [
     # Typer's whole calling convention is function defaults that call typer.Option().

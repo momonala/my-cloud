@@ -33,8 +33,7 @@ def send_telegram_message(text: str) -> None:
     if not TELEGRAM_API_TOKEN or not TELEGRAM_CHAT_ID:
         metrics.increment("telegram_skipped")
         logger.warning(
-            "Telegram not configured (TELEGRAM_API_TOKEN/TELEGRAM_CHAT_ID unset); "
-            "dropping notification: %s",
+            "Telegram not configured (TELEGRAM_API_TOKEN/TELEGRAM_CHAT_ID unset); dropping notification: %s",
             text,
         )
         return
