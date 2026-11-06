@@ -407,7 +407,7 @@ fork](https://github.com/timlaing/pyicloud); the original `picklepete/pyicloud` 
 ## Development
 
 ```bash
-./test-and-lint.sh   # pytest, black --check, ruff check
+./test-and-lint.sh   # pytest, ruff format --check, ruff check
 ```
 
 Tests cover `src/core/config.py`, the pure functions in `src/findmy/tracking.py` (distance, age), the
