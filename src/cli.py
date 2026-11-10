@@ -117,6 +117,7 @@ def poll_command() -> None:
     so run `mycloud airtags` once at the console first.
     """
     from src.core.db import init_db
+    from src.findmy.poller import poller_state
     from src.findmy.poller import run_forever
 
     _configure_server_logging()
@@ -124,7 +125,7 @@ def poll_command() -> None:
     init_db()
     stop_event = threading.Event()
     try:
-        run_forever(stop_event)
+        run_forever(stop_event, poller_state)
     except KeyboardInterrupt:
         stop_event.set()
 

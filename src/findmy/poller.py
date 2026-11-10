@@ -35,8 +35,6 @@ _PERSISTENT_FAILURE_THRESHOLD = 3
 
 
 class PollerPhase(StrEnum):
-    NEVER_SUCCEEDED = "never_succeeded"
-    HEALTHY = "healthy"
     FAILING = "failing"
     PERSISTENTLY_FAILING = "persistently_failing"
 
@@ -50,47 +48,34 @@ class PollerState:
         self._last_success_at: datetime | None = None
 
     @property
-    def consecutive_failures(self) -> int:
-        with self._lock:
-            return self._consecutive_failures
-
-    @property
     def last_success_at(self) -> datetime | None:
         with self._lock:
             return self._last_success_at
 
-    @property
-    def phase(self) -> PollerPhase:
-        with self._lock:
-            return self._phase()
-
-    def record_success(self, now: datetime) -> PollerPhase:
+    def record_poll(self, now: datetime) -> None:
         with self._lock:
             self._last_success_at = now
-            self._consecutive_failures = 0
-            return self._phase()
 
-    def record_failure(self) -> PollerPhase:
+    def record_recovery(self) -> None:
+        with self._lock:
+            self._consecutive_failures = 0
+
+    def record_failure(self) -> tuple[PollerPhase, int]:
         with self._lock:
             self._consecutive_failures += 1
-            return self._phase()
+            failures = self._consecutive_failures
+        if failures >= _PERSISTENT_FAILURE_THRESHOLD:
+            return PollerPhase.PERSISTENTLY_FAILING, failures
+        return PollerPhase.FAILING, failures
 
     def backoff_seconds(self) -> int:
         """Delay before the next cycle: the normal interval, doubling while failing."""
-        failures = self.consecutive_failures
+        with self._lock:
+            failures = self._consecutive_failures
         if failures == 0:
             return POLL_INTERVAL_SECONDS
         doubled: int = POLL_INTERVAL_SECONDS * 2**failures
         return min(doubled, MAX_BACKOFF_SECONDS)
-
-    def _phase(self) -> PollerPhase:
-        if self._consecutive_failures >= _PERSISTENT_FAILURE_THRESHOLD:
-            return PollerPhase.PERSISTENTLY_FAILING
-        if self._consecutive_failures > 0:
-            return PollerPhase.FAILING
-        if self._last_success_at is None:
-            return PollerPhase.NEVER_SUCCEEDED
-        return PollerPhase.HEALTHY
 
 
 poller_state = PollerState()
@@ -115,7 +100,7 @@ def _poll_once() -> None:
     )
 
 
-def run_forever(stop_event: threading.Event, state: PollerState = poller_state) -> None:
+def run_forever(stop_event: threading.Event, state: PollerState) -> None:
     """Poll immediately, then on an interval until `stop_event` is set.
 
     Failures back off exponentially up to `MAX_BACKOFF_SECONDS` rather than
@@ -129,24 +114,26 @@ def run_forever(stop_event: threading.Event, state: PollerState = poller_state) 
         while not stop_event.is_set():
             try:
                 _poll_once()
-                state.record_success(datetime.now(UTC))
+                state.record_poll(datetime.now(UTC))
                 if wal_keeper is None:
                     wal_keeper = get_connection()
+                state.record_recovery()
                 metrics.gauge("consecutive_failures", 0)
             except Exception:
                 # A network blip or expired session shouldn't kill the poller or the
                 # API -- just keep serving the last-known data and try again later.
-                phase = state.record_failure()
+                phase, failures = state.record_failure()
                 metrics.increment("failure")
-                metrics.gauge("consecutive_failures", state.consecutive_failures)
-                if phase is PollerPhase.PERSISTENTLY_FAILING:
-                    logger.exception(
-                        "Poll cycle failed %d times in a row; the session may need re-authenticating "
-                        "at the console",
-                        state.consecutive_failures,
-                    )
-                else:
-                    logger.warning("Poll cycle failed; keeping last known data", exc_info=True)
+                metrics.gauge("consecutive_failures", failures)
+                match phase:
+                    case PollerPhase.PERSISTENTLY_FAILING:
+                        logger.exception(
+                            "Poll cycle failed %d times in a row; the session may need re-authenticating "
+                            "at the console",
+                            failures,
+                        )
+                    case PollerPhase.FAILING:
+                        logger.warning("Poll cycle failed; keeping last known data", exc_info=True)
             stop_event.wait(state.backoff_seconds())
     finally:
         if wal_keeper is not None:
@@ -156,5 +143,5 @@ def run_forever(stop_event: threading.Event, state: PollerState = poller_state) 
 def start_background_poller() -> threading.Event:
     """Start the poller on a daemon thread and return its stop event."""
     stop_event = threading.Event()
-    threading.Thread(target=run_forever, args=(stop_event,), daemon=True).start()
+    threading.Thread(target=run_forever, args=(stop_event, poller_state), daemon=True).start()
     return stop_event
