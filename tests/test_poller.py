@@ -120,7 +120,7 @@ def test_poll_once_evaluates_alerts_at_a_utc_aware_now(tmp_path, monkeypatch):
     monkeypatch.setattr(poller, "fetch_devices", lambda: [make_item("tag-1", make_location(52.5, 13.4))])
     monkeypatch.setattr(poller, "fetch_airtags", lambda: [])
     received = []
-    monkeypatch.setattr(poller, "check_alerts", lambda conn, moved_device_ids, now: received.append(now))
+    monkeypatch.setattr(poller, "check_alerts", lambda _conn, _moved_device_ids, now: received.append(now))
 
     poller._poll_once()
 
