@@ -467,9 +467,14 @@ def test_reads_of_alerts_are_open_even_when_a_write_token_is_configured(client, 
 
 
 def test_status_prefers_the_last_poll_over_the_last_device_change(client, seed, monkeypatch):
+    from datetime import UTC
+    from datetime import datetime
+
     import src.findmy.poller as poller
 
     seed(make_item("tag-1", make_location(52.5, 13.4)))
-    monkeypatch.setattr(poller, "_last_success_at", "2030-01-01T00:00:00+00:00")
+    state = poller.PollerState()
+    state.record_success(datetime(2030, 1, 1, tzinfo=UTC))
+    monkeypatch.setattr(findmy_api, "poller_state", state)
 
-    assert client.get("/api/findmy/status").get_json()["last_updated"] == "2030-01-01T00:00:00+00:00"
+    assert client.get("/api/findmy/status").get_json() == {"last_updated": "2030-01-01T00:00:00+00:00"}
