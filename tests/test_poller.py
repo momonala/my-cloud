@@ -60,7 +60,7 @@ def test_failure_becomes_persistent_exactly_at_the_threshold():
 
 @pytest.mark.parametrize(
     ("failures", "expected"),
-    [(0, 60), (1, 120), (2, 240), (3, 480), (4, 900)],
+    [(0, 60), (1, 120), (2, 240), (3, 480), (4, 900), (50, 900)],
 )
 def test_backoff_doubles_per_failure_up_to_the_cap(failures, expected):
     assert failed_state(failures).backoff_seconds() == expected

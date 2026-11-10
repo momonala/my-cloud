@@ -1,8 +1,8 @@
 """Tests for src/findmy/db.py's write rules.
 
-Lookups and alert CRUD are exercised through the routes in tests/test_findmy_api.py
-and through check_alerts in tests/test_alert_state.py; what is pinned here is
-when a fetch writes history and device rows, and that re-initialising keeps data.
+Lookups and alert CRUD are exercised through the routes in tests/test_findmy_api.py;
+what is pinned here is when a fetch writes history and device rows, and that
+init_db migrates to head and keeps existing data.
 """
 
 from dataclasses import replace
@@ -67,6 +67,23 @@ def test_init_db_is_idempotent(conn, tmp_path):
     init_db(tmp_path / "findmy.db")
 
     assert latest_location_for(conn, "tag-1")["latitude"] == 52.5
+
+
+def test_init_db_migrates_to_the_latest_revision(tmp_path):
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    import src.core.db as core_db
+
+    config = Config(str(core_db._ALEMBIC_INI))
+    config.set_main_option("script_location", str(core_db._MIGRATIONS_DIR))
+    db_path = tmp_path / "findmy.db"
+    core_db.init_db(db_path)
+
+    conn = core_db.get_connection(db_path)
+    revision = conn.execute("SELECT version_num FROM alembic_version").fetchone()["version_num"]
+    conn.close()
+    assert revision == ScriptDirectory.from_config(config).get_current_head()
 
 
 def _device_updated_at(conn, device_id):
