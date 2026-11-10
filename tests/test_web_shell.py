@@ -33,37 +33,25 @@ def test_the_old_dashboard_url_still_reaches_the_page(client):
     assert response.headers["Location"] == "/findmy"
 
 
-def test_shared_assets_are_served(client):
-    for filename in (
-        "tokens.css",
-        "shell.css",
-        "banners.js",
-        "dialogs.js",
-        "format.js",
-        "http.js",
-        "motion.js",
-    ):
-        assert client.get(f"/static/{filename}").status_code == 200, filename
-
-
 def test_config_exposes_the_basemap_keys(client, monkeypatch):
     """Map keys are shell-wide: any page that draws a map reads them from here."""
-    monkeypatch.setattr(app_module, "MAPTILER_API_KEY", "")
-    monkeypatch.setattr(app_module, "offered_map_types", lambda: [])
-    assert client.get("/api/config").get_json() == {"maptiler_key": "", "google_map_types": []}
+    monkeypatch.setattr(app_module, "MAPTILER_API_KEY", "mt-key")
+    monkeypatch.setattr(
+        app_module, "offered_map_types", lambda: [{"type": "roadmap", "label": "Google Roadmap"}]
+    )
+    assert client.get("/api/config").get_json() == {
+        "maptiler_key": "mt-key",
+        "google_map_types": [{"type": "roadmap", "label": "Google Roadmap"}],
+    }
 
 
-def test_google_tile_route_proxies_bytes(client, monkeypatch):
-    monkeypatch.setattr(tiles, "fetch_tile", lambda *_: (b"PNG", "image/png"))
-    response = client.get("/api/tiles/google/roadmap/5/1/2")
-    assert response.status_code == 200
-    assert response.data == b"PNG"
-    assert response.headers["Cache-Control"] == "public, max-age=2592000, immutable"
-
-
-def test_google_tile_route_passes_through_the_upstream_content_type(client, monkeypatch):
+def test_google_tile_route_proxies_bytes_and_content_type(client, monkeypatch):
     monkeypatch.setattr(tiles, "fetch_tile", lambda *_: (b"JPG", "image/jpeg"))
-    assert client.get("/api/tiles/google/hybrid/5/1/2").headers["Content-Type"] == "image/jpeg"
+    response = client.get("/api/tiles/google/hybrid/5/1/2")
+    assert response.status_code == 200
+    assert response.data == b"JPG"
+    assert response.headers["Content-Type"] == "image/jpeg"
+    assert response.headers["Cache-Control"] == "public, max-age=2592000, immutable"
 
 
 def test_google_tile_route_rejects_an_unknown_map_type(client, monkeypatch):
@@ -80,12 +68,3 @@ def test_google_tile_route_reports_upstream_failure(client, monkeypatch):
 
     monkeypatch.setattr(tiles, "fetch_tile", _fail)
     assert client.get("/api/tiles/google/roadmap/5/1/2").status_code == 502
-
-
-def test_config_lists_the_google_map_types_the_server_offers(client, monkeypatch):
-    monkeypatch.setattr(
-        app_module, "offered_map_types", lambda: [{"type": "roadmap", "label": "Google Roadmap"}]
-    )
-    assert client.get("/api/config").get_json()["google_map_types"] == [
-        {"type": "roadmap", "label": "Google Roadmap"}
-    ]

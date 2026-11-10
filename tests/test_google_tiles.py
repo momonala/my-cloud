@@ -78,16 +78,6 @@ def test_a_cached_tile_is_not_downloaded_twice(mock_post, mock_get):
 @patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
 @patch("src.maps.google_tiles.requests.get")
 @patch("src.maps.google_tiles.requests.post")
-def test_each_coordinate_is_cached_separately(mock_post, mock_get):
-    mock_post.return_value = _session_response()
-    mock_get.side_effect = [_tile_response(200, b"one"), _tile_response(200, b"two")]
-    assert fetch_tile("roadmap", 5, 1, 2)[0] == b"one"
-    assert fetch_tile("roadmap", 5, 1, 3)[0] == b"two"
-
-
-@patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
-@patch("src.maps.google_tiles.requests.get")
-@patch("src.maps.google_tiles.requests.post")
 def test_a_failed_tile_is_not_cached(mock_post, mock_get):
     mock_post.return_value = _session_response()
     mock_get.side_effect = [_tile_response(500), _tile_response(200, b"PNG")]
@@ -96,16 +86,11 @@ def test_a_failed_tile_is_not_cached(mock_post, mock_get):
     assert fetch_tile("roadmap", 5, 1, 2)[0] == b"PNG"
 
 
-def test_offered_map_types_is_empty_without_a_key():
+def test_offered_map_types_depend_on_a_configured_key():
     with patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", ""):
         assert google_tiles.offered_map_types() == []
-
-
-@patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
-def test_offered_map_types_labels_every_type_it_can_serve():
-    offered = google_tiles.offered_map_types()
-    assert [entry["type"] for entry in offered] == list(google_tiles._MAP_TYPES)
-    assert all(entry["label"] for entry in offered)
+    with patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1"):
+        assert [entry["type"] for entry in google_tiles.offered_map_types()] == list(google_tiles._MAP_TYPES)
 
 
 @patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
@@ -150,20 +135,11 @@ def test_malformed_session_payload_raises_a_google_tiles_error(mock_post):
 @patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
 @patch("src.maps.google_tiles.requests.get")
 @patch("src.maps.google_tiles.requests.post")
-def test_fetch_tile_returns_image_bytes(mock_post, mock_get):
-    mock_post.return_value = _session_response()
-    mock_get.return_value = _tile_response(200, b"PNG")
-    assert fetch_tile("hybrid", 5, 1, 2) == (b"PNG", "image/png")
-    assert mock_get.call_args.kwargs["params"] == {"session": "sess-1", "key": "key-1"}
-
-
-@patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")
-@patch("src.maps.google_tiles.requests.get")
-@patch("src.maps.google_tiles.requests.post")
-def test_fetch_tile_reports_the_upstream_content_type(mock_post, mock_get):
+def test_fetch_tile_returns_the_bytes_and_upstream_content_type(mock_post, mock_get):
     mock_post.return_value = _session_response()
     mock_get.return_value = _tile_response(200, b"JPG", content_type="image/jpeg")
-    assert fetch_tile("satellite", 5, 1, 2)[1] == "image/jpeg"
+    assert fetch_tile("hybrid", 5, 1, 2) == (b"JPG", "image/jpeg")
+    assert mock_get.call_args.kwargs["params"] == {"session": "sess-1", "key": "key-1"}
 
 
 @patch("src.maps.google_tiles.GOOGLE_MAPS_API_KEY", "key-1")

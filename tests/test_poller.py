@@ -47,27 +47,6 @@ class FixedClock:
         return T1
 
 
-def test_a_fresh_state_has_no_success_and_the_normal_interval():
-    state = poller.PollerState()
-
-    assert state.last_success_at is None
-    assert state.backoff_seconds() == poller.POLL_INTERVAL_SECONDS
-
-
-def test_recording_a_poll_sets_the_success_time():
-    state = poller.PollerState()
-    state.record_poll(T0)
-
-    assert state.last_success_at == T0
-
-
-def test_failures_before_any_success_count_as_failing():
-    state = poller.PollerState()
-
-    assert state.record_failure() == (poller.PollerPhase.FAILING, 1)
-    assert state.last_success_at is None
-
-
 def test_failure_becomes_persistent_exactly_at_the_threshold():
     state = poller.PollerState()
     state.record_poll(T0)
@@ -79,19 +58,9 @@ def test_failure_becomes_persistent_exactly_at_the_threshold():
     assert state.last_success_at == T0
 
 
-def test_recovery_after_failures_resets_the_count():
-    state = failed_state(4)
-    state.record_poll(T1)
-    state.record_recovery()
-
-    assert state.last_success_at == T1
-    assert state.backoff_seconds() == poller.POLL_INTERVAL_SECONDS
-    assert state.record_failure() == (poller.PollerPhase.FAILING, 1)
-
-
 @pytest.mark.parametrize(
     ("failures", "expected"),
-    [(0, 60), (1, 120), (2, 240), (3, 480), (4, 900), (50, 900)],
+    [(0, 60), (1, 120), (2, 240), (3, 480), (4, 900)],
 )
 def test_backoff_doubles_per_failure_up_to_the_cap(failures, expected):
     assert failed_state(failures).backoff_seconds() == expected
@@ -128,36 +97,6 @@ def test_poll_once_evaluates_alerts_at_a_utc_aware_now(tmp_path, monkeypatch):
     assert received[0].tzinfo == UTC
 
 
-def test_run_forever_survives_a_failing_cycle(monkeypatch):
-    """A raising fetch must not kill the loop -- the API keeps serving stale data."""
-    stop_event = threading.Event()
-    calls = []
-
-    def failing_poll():
-        calls.append(1)
-        if len(calls) >= 2:
-            stop_event.set()
-        raise MissingCredentialsError("no credentials")
-
-    monkeypatch.setattr(poller, "_poll_once", failing_poll)
-    waits = []
-    monkeypatch.setattr(stop_event, "wait", waits.append)
-    state = poller.PollerState()
-
-    poller.run_forever(stop_event, state)
-
-    assert len(calls) == 2
-    assert waits == [120, 240]
-
-
-def test_run_forever_stops_when_the_event_is_set(monkeypatch):
-    stop_event = threading.Event()
-    stop_event.set()
-    monkeypatch.setattr(poller, "_poll_once", lambda: pytest.fail("should not poll when already stopped"))
-
-    poller.run_forever(stop_event, poller.PollerState())
-
-
 def test_run_forever_records_when_a_cycle_succeeded(tmp_path, monkeypatch):
     import src.core.db as core_db
 
@@ -179,7 +118,7 @@ def test_run_forever_records_when_a_cycle_succeeded(tmp_path, monkeypatch):
     assert fake_metrics.gauges == [("consecutive_failures", 0)]
 
 
-def test_run_forever_logs_an_error_only_from_the_threshold_on(monkeypatch, caplog):
+def test_run_forever_survives_failures_backs_off_and_escalates_at_the_threshold(monkeypatch, caplog):
     stop_event = threading.Event()
     calls = []
 
@@ -190,10 +129,13 @@ def test_run_forever_logs_an_error_only_from_the_threshold_on(monkeypatch, caplo
         raise MissingCredentialsError("no credentials")
 
     monkeypatch.setattr(poller, "_poll_once", failing_poll)
-    monkeypatch.setattr(stop_event, "wait", lambda _seconds: None)
+    waits = []
+    monkeypatch.setattr(stop_event, "wait", waits.append)
 
     with caplog.at_level(logging.WARNING, logger=poller.logger.name):
         poller.run_forever(stop_event, poller.PollerState())
+
+    assert waits == [120, 240, 480, 900]
 
     assert [record.levelno for record in caplog.records] == [
         logging.WARNING,

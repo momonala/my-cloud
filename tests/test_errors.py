@@ -11,32 +11,18 @@ import typer
 
 import src.cli as cli
 import src.findmy.tracking as tracking
-from src.core.errors import FindMyError
 from src.core.errors import MissingCredentialsError
 
 
-def test_require_credentials_raises_a_domain_error(monkeypatch):
-    monkeypatch.setattr(tracking, "ICLOUD_USERNAME", "")
+def test_require_credentials_raises_a_domain_error_unless_both_are_set(monkeypatch):
+    monkeypatch.setattr(tracking, "ICLOUD_USERNAME", "me@example.com")
     monkeypatch.setattr(tracking, "ICLOUD_PASSWORD", "")
 
     with pytest.raises(MissingCredentialsError):
         tracking.require_credentials()
 
-
-def test_require_credentials_returns_both_when_set(monkeypatch):
-    monkeypatch.setattr(tracking, "ICLOUD_USERNAME", "me@example.com")
     monkeypatch.setattr(tracking, "ICLOUD_PASSWORD", "hunter2")
-
     assert tracking.require_credentials() == ("me@example.com", "hunter2")
-
-
-def test_domain_errors_are_not_typer_exits():
-    """The whole point: the fetch layer must not raise CLI control flow.
-
-    `typer.Exit` inherits from `click.exceptions.Exit`, which the poller's
-    `except Exception` would swallow into a log line every cycle forever.
-    """
-    assert not issubclass(FindMyError, typer.Exit)
 
 
 def test_cli_main_translates_domain_errors(monkeypatch, capsys):

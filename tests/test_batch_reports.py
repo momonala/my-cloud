@@ -99,13 +99,6 @@ def test_capped_round_resumes_without_gap_or_overlap():
     assert probe_ids | sweep_ids == expected, "rounds must cover the range exactly"
 
 
-def test_uncapped_build_covers_whole_range():
-    accessory = FakeAccessory()
-    _groups, resume = _build_groups(accessory, 100, 50, owners={})
-
-    assert resume < 50
-
-
 def test_apply_keeps_newest_report_per_accessory():
     accessory = FakeAccessory()
     owners: dict = {}

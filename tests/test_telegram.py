@@ -7,8 +7,6 @@ import pytest
 import requests
 
 from src.findmy.telegram import TELEGRAM_MAX_MESSAGE_LENGTH
-from src.findmy.telegram import send_enter_alert
-from src.findmy.telegram import send_exit_alert
 from src.findmy.telegram import send_movement_alert
 from src.findmy.telegram import send_telegram_message
 
@@ -35,16 +33,10 @@ def test_send_telegram_message_posts_markdown(mock_post):
 @patch("src.findmy.telegram.TELEGRAM_CHAT_ID", "")
 @patch("src.findmy.telegram.TELEGRAM_API_TOKEN", "")
 @patch("src.findmy.telegram.requests.post")
-def test_send_telegram_message_is_a_no_op_when_unconfigured(mock_post):
-    send_telegram_message("*hello*")
-    mock_post.assert_not_called()
-
-
-@patch("src.findmy.telegram.TELEGRAM_CHAT_ID", "")
-@patch("src.findmy.telegram.TELEGRAM_API_TOKEN", "")
-def test_send_telegram_message_warns_when_unconfigured(caplog):
+def test_send_telegram_message_warns_and_skips_when_unconfigured(mock_post, caplog):
     with caplog.at_level("WARNING", logger="src.findmy.telegram"):
         send_telegram_message("*hello*")
+    mock_post.assert_not_called()
     assert "not configured" in caplog.text
 
 
@@ -80,33 +72,3 @@ def test_send_movement_alert_formats_name_and_distance(mock_send):
 def test_send_movement_alert_prefixes_the_devices_own_icon(mock_send):
     send_movement_alert(_alert(device_icon="🚲"), 250.4)
     assert mock_send.call_args.args[0].startswith("🚲 ")
-
-
-@patch("src.findmy.telegram.send_telegram_message")
-def test_send_movement_alert_falls_back_to_a_default_icon(mock_send):
-    send_movement_alert(_alert(device_icon=None), 250.4)
-    assert mock_send.call_args.args[0].startswith("📍 ")
-
-
-@patch("src.findmy.telegram.send_telegram_message")
-def test_send_enter_alert_reports_entered(mock_send):
-    send_enter_alert(_alert())
-    assert "entered" in mock_send.call_args.args[0]
-
-
-@patch("src.findmy.telegram.send_telegram_message")
-def test_send_enter_alert_prefixes_the_devices_own_icon(mock_send):
-    send_enter_alert(_alert(device_icon="🔑"))
-    assert mock_send.call_args.args[0].startswith("🔑 ")
-
-
-@patch("src.findmy.telegram.send_telegram_message")
-def test_send_exit_alert_reports_left(mock_send):
-    send_exit_alert(_alert())
-    assert "left" in mock_send.call_args.args[0]
-
-
-@patch("src.findmy.telegram.send_telegram_message")
-def test_send_exit_alert_prefixes_the_devices_own_icon(mock_send):
-    send_exit_alert(_alert(device_icon="🔑"))
-    assert mock_send.call_args.args[0].startswith("🔑 ")

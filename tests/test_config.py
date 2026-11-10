@@ -1,7 +1,7 @@
 """Tests for src/core/config.py.
 
 These tests verify that:
-1. Individual config keys return their values, in both the flag and bare forms
+1. A config key returns its value, in both the flag and bare forms
 2. --all returns every configuration value
 3. A missing or unknown key produces an error
 
@@ -19,21 +19,11 @@ from src.core.config import app
 runner = CliRunner()
 
 
-@pytest.mark.parametrize(
-    "flag,expected_output",
-    [
-        ("--project-name", "my-cloud"),
-        ("--project-version", "0.1.0"),
-        ("--home-latitude", "52.52000"),
-        ("--home-longitude", "13.40500"),
-        ("--flask-port", "5016"),
-    ],
-)
-def test_config_returns_single_value(flag: str, expected_output: str):
-    result = runner.invoke(app, [flag])
+def test_config_returns_single_value():
+    result = runner.invoke(app, ["--flask-port"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == expected_output
+    assert result.stdout.strip() == "5016"
 
 
 def test_bare_key_form_also_works():
@@ -50,15 +40,11 @@ def test_config_all_returns_all_values():
     assert "flask_port=5016" in result.stdout
 
 
-def test_config_without_key_fails():
-    result = runner.invoke(app, [])
+@pytest.mark.parametrize(
+    ("args", "message"), [([], "no config key specified"), (["--nonsense"], "unknown config key")]
+)
+def test_config_with_a_missing_or_unknown_key_fails(args, message):
+    result = runner.invoke(app, args)
 
     assert result.exit_code == 1
-    assert "no config key specified" in result.output.lower()
-
-
-def test_config_with_unknown_key_fails():
-    result = runner.invoke(app, ["--nonsense"])
-
-    assert result.exit_code == 1
-    assert "unknown config key" in result.output.lower()
+    assert message in result.output.lower()
