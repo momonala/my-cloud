@@ -112,6 +112,22 @@ def test_poll_once_records_fetched_items(tmp_path, monkeypatch):
         assert db.latest_location_for(conn, "tag-1")["latitude"] == 52.5
 
 
+def test_poll_once_evaluates_alerts_at_a_utc_aware_now(tmp_path, monkeypatch):
+    import src.core.db as core_db
+
+    monkeypatch.setattr(core_db, "DB_PATH", tmp_path / "findmy.db")
+    core_db.init_db()
+    monkeypatch.setattr(poller, "fetch_devices", lambda: [make_item("tag-1", make_location(52.5, 13.4))])
+    monkeypatch.setattr(poller, "fetch_airtags", lambda: [])
+    received = []
+    monkeypatch.setattr(poller, "check_alerts", lambda conn, moved_device_ids, now: received.append(now))
+
+    poller._poll_once()
+
+    assert len(received) == 1
+    assert received[0].tzinfo == UTC
+
+
 def test_run_forever_survives_a_failing_cycle(monkeypatch):
     """A raising fetch must not kill the loop -- the API keeps serving stale data."""
     stop_event = threading.Event()
