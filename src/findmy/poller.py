@@ -88,7 +88,7 @@ def _poll_once() -> None:
             result = record_fetch(conn, items)
             # Same connection/transaction as record_fetch, so a crash between the
             # two can't leave history written but that cycle's alerts unevaluated.
-            check_alerts(conn, result.moved_device_ids)
+            check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
     item_counts = result.counts.get("item", NO_COUNTS)
     device_counts = result.counts.get("device", NO_COUNTS)
     logger.info(

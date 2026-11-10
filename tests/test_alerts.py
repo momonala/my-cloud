@@ -31,7 +31,7 @@ def test_check_alerts_is_a_no_op_for_a_device_with_no_alerts(conn):
     record_fetch(conn, [make_item("tag-1", make_location(52.5, 13.4))])
     result = record_fetch(conn, [make_item("tag-1", make_location(52.6, 13.4, minutes_later(1)))])
 
-    check_alerts(conn, result.moved_device_ids)  # must not raise
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))  # must not raise
 
 
 def test_movement_alert_fires_when_the_jump_exceeds_the_threshold(conn):
@@ -40,7 +40,7 @@ def test_movement_alert_fires_when_the_jump_exceeds_the_threshold(conn):
 
     # ~11km jump between fixes, well over the 100m threshold.
     result = record_fetch(conn, [make_item("tag-1", make_location(52.6, 13.4, minutes_later(1)))])
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["id"] == alert_id
@@ -53,7 +53,7 @@ def test_movement_alert_does_not_fire_for_a_move_under_the_threshold(conn):
 
     # ~1.1m move -- under the 100m threshold.
     result = record_fetch(conn, [make_item("tag-1", make_location(52.50001, 13.4, minutes_later(1)))])
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] is None
 
@@ -64,7 +64,7 @@ def test_movement_alert_skipped_on_a_devices_first_ever_fix(conn):
 
     # First-ever fix: nothing to compare against, so this must not crash or fire.
     result = record_fetch(conn, [make_item("tag-1", make_location(52.5, 13.4))])
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] is None
 
@@ -74,14 +74,14 @@ def test_movement_alert_does_not_refire_within_the_cooldown(conn):
     create_alert(conn, "tag-1", "movement", 100)
 
     first = record_fetch(conn, [make_item("tag-1", make_location(52.6, 13.4, minutes_later(1)))])
-    check_alerts(conn, first.moved_device_ids)
+    check_alerts(conn, first.moved_device_ids, datetime.now(UTC))
     first_triggered_at = alerts_for_device(conn, "tag-1")[0]["triggered_at"]
 
     # Another big jump a second later -- well inside the cooldown window.
     second = record_fetch(
         conn, [make_item("tag-1", make_location(52.5, 13.4, minutes_later(1) + timedelta(seconds=1)))]
     )
-    check_alerts(conn, second.moved_device_ids)
+    check_alerts(conn, second.moved_device_ids, datetime.now(UTC))
 
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] == first_triggered_at
 
@@ -91,7 +91,7 @@ def test_movement_alert_refires_once_the_cooldown_elapses(conn):
     alert_id = create_alert(conn, "tag-1", "movement", 100)
 
     first = record_fetch(conn, [make_item("tag-1", make_location(52.6, 13.4, minutes_later(1)))])
-    check_alerts(conn, first.moved_device_ids)
+    check_alerts(conn, first.moved_device_ids, datetime.now(UTC))
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] is not None
 
     # check_alerts gates the cooldown on wall-clock time, not the fix's own
@@ -100,7 +100,7 @@ def test_movement_alert_refires_once_the_cooldown_elapses(conn):
     log_alert_event(conn, alert_id, backdated)
 
     second = record_fetch(conn, [make_item("tag-1", make_location(52.5, 13.4, minutes_later(2)))])
-    check_alerts(conn, second.moved_device_ids)
+    check_alerts(conn, second.moved_device_ids, datetime.now(UTC))
 
     second_triggered_at = alerts_for_device(conn, "tag-1")[0]["triggered_at"]
     assert second_triggered_at is not None
@@ -114,7 +114,7 @@ def test_enter_alert_activates_on_entering_the_radius(conn):
     result = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["id"] == alert_id
@@ -131,14 +131,14 @@ def test_enter_alert_measures_from_a_custom_anchor_not_home(conn):
     near_home = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 0.001, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, near_home.moved_device_ids)
+    check_alerts(conn, near_home.moved_device_ids, datetime.now(UTC))
     assert alerts_for_device(conn, "tag-1")[0]["is_active"] == 0
 
     # Moves to within the anchor's own radius.
     at_anchor = record_fetch(
         conn, [make_item("tag-1", make_location(anchor_lat, anchor_lon, minutes_later(2)))]
     )
-    check_alerts(conn, at_anchor.moved_device_ids)
+    check_alerts(conn, at_anchor.moved_device_ids, datetime.now(UTC))
     assert alerts_for_device(conn, "tag-1")[0]["is_active"] == 1
 
 
@@ -149,7 +149,7 @@ def test_enter_alert_does_not_activate_outside_the_radius(conn):
     result = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 0.9, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["is_active"] == 0
@@ -163,14 +163,14 @@ def test_enter_alert_does_not_notify_on_leaving_but_resets_state_silently(conn):
     enter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, enter.moved_device_ids)
+    check_alerts(conn, enter.moved_device_ids, datetime.now(UTC))
     triggered_at = alerts_for_device(conn, "tag-1")[0]["triggered_at"]
     assert triggered_at is not None
 
     leave = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 1, HOME_LONGITUDE, minutes_later(2)))]
     )
-    check_alerts(conn, leave.moved_device_ids)
+    check_alerts(conn, leave.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["is_active"] == 0
@@ -186,13 +186,13 @@ def test_exit_alert_fires_on_leaving_after_silently_tracking_the_entry(conn):
     enter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, enter.moved_device_ids)
+    check_alerts(conn, enter.moved_device_ids, datetime.now(UTC))
     assert alerts_for_device(conn, "tag-1")[0]["is_active"] == 1
 
     leave = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 1, HOME_LONGITUDE, minutes_later(2)))]
     )
-    check_alerts(conn, leave.moved_device_ids)
+    check_alerts(conn, leave.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["is_active"] == 0
@@ -206,7 +206,7 @@ def test_exit_alert_does_not_notify_on_entering(conn):
     result = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["is_active"] == 1  # now known to be inside
@@ -220,20 +220,20 @@ def test_enter_alert_does_not_refire_within_the_cooldown_across_a_bounce(conn):
     enter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, enter.moved_device_ids)
+    check_alerts(conn, enter.moved_device_ids, datetime.now(UTC))
     first_triggered_at = alerts_for_device(conn, "tag-1")[0]["triggered_at"]
     assert first_triggered_at is not None
 
     leave = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 1, HOME_LONGITUDE, minutes_later(2)))]
     )
-    check_alerts(conn, leave.moved_device_ids)
+    check_alerts(conn, leave.moved_device_ids, datetime.now(UTC))
 
     # Re-enters well within the cooldown window of the first notification.
     reenter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(3)))]
     )
-    check_alerts(conn, reenter.moved_device_ids)
+    check_alerts(conn, reenter.moved_device_ids, datetime.now(UTC))
 
     alert = alerts_for_device(conn, "tag-1")[0]
     assert alert["triggered_at"] == first_triggered_at
@@ -248,7 +248,7 @@ def test_movement_alert_notifies_telegram_when_it_fires(mock_send, conn):
     create_alert(conn, "tag-1", "movement", 100)
 
     result = record_fetch(conn, [make_item("tag-1", make_location(52.6, 13.4, minutes_later(1)))])
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     mock_send.assert_called_once()
     assert mock_send.call_args.args[0]["device_id"] == "tag-1"
@@ -260,7 +260,7 @@ def test_movement_alert_does_not_notify_when_it_does_not_fire(mock_send, conn):
     create_alert(conn, "tag-1", "movement", 100)
 
     result = record_fetch(conn, [make_item("tag-1", make_location(52.50001, 13.4, minutes_later(1)))])
-    check_alerts(conn, result.moved_device_ids)
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))
 
     mock_send.assert_not_called()
 
@@ -282,7 +282,7 @@ def test_a_failed_telegram_send_does_not_stop_the_rest_of_the_cycle(mock_send, c
             make_item("tag-2", make_location(52.6, 13.4, minutes_later(1))),
         ],
     )
-    check_alerts(conn, result.moved_device_ids)  # must not raise
+    check_alerts(conn, result.moved_device_ids, datetime.now(UTC))  # must not raise
 
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] is not None
     assert alerts_for_device(conn, "tag-2")[0]["triggered_at"] is not None
@@ -296,13 +296,13 @@ def test_enter_alert_notifies_telegram_on_entering_only(mock_send, conn):
     enter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, enter.moved_device_ids)
+    check_alerts(conn, enter.moved_device_ids, datetime.now(UTC))
     assert mock_send.call_count == 1
 
     leave = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 1, HOME_LONGITUDE, minutes_later(2)))]
     )
-    check_alerts(conn, leave.moved_device_ids)
+    check_alerts(conn, leave.moved_device_ids, datetime.now(UTC))
     assert mock_send.call_count == 1  # still just the one call, from entering
 
 
@@ -314,11 +314,11 @@ def test_exit_alert_notifies_telegram_on_leaving_only(mock_send, conn):
     enter = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE, HOME_LONGITUDE, minutes_later(1)))]
     )
-    check_alerts(conn, enter.moved_device_ids)
+    check_alerts(conn, enter.moved_device_ids, datetime.now(UTC))
     assert mock_send.call_count == 0  # entering isn't notified for "exit"
 
     leave = record_fetch(
         conn, [make_item("tag-1", make_location(HOME_LATITUDE + 1, HOME_LONGITUDE, minutes_later(2)))]
     )
-    check_alerts(conn, leave.moved_device_ids)
+    check_alerts(conn, leave.moved_device_ids, datetime.now(UTC))
     assert mock_send.call_count == 1

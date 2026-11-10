@@ -10,13 +10,15 @@ Three alert types: `movement` fires when consecutive fixes are more than
 out of `threshold_m` of its anchor point -- `(anchor_lat, anchor_lon)` if set,
 else the configured home coordinates.
 
-`enter`/`exit` are edge-triggered off `alerts.is_active`, which always means
-"the device is currently inside this alert's radius" regardless of type. Both
-types track it so each can detect its own transition; the opposite transition
-updates `is_active` silently so the next real crossing is still detected.
+`enter`/`exit` are edge-triggered by next_state() over an AlertState read from
+the alert row: `inside` is `alerts.is_active` ("the device is currently inside
+this alert's radius", regardless of type) and `cooldown_until` follows from the
+last `alert_events` row. Both types track `inside` so each can detect its own
+transition; the opposite transition updates it silently so the next real
+crossing is still detected.
 
 All three types are gated by ALERT_COOLDOWN_S. A suppressed `enter`/`exit`
-transition leaves `is_active` untouched and so is retried on the next cycle,
+transition leaves the state untouched and so is retried on the next cycle,
 landing late rather than being lost.
 
 Delivery is in-app (the dashboard reads `is_active`/`triggered_at` off
@@ -26,8 +28,11 @@ GET /alerts) plus an optional Telegram push from src/findmy/telegram.py.
 import logging
 import sqlite3
 from collections.abc import Callable
-from datetime import UTC
+from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime
+from datetime import timedelta
+from typing import Literal
 
 import requests
 
@@ -47,11 +52,51 @@ logger = logging.getLogger(__name__)
 # and forth past a movement threshold, from notifying every poll cycle.
 ALERT_COOLDOWN_S = 300
 
+RadiusAlertType = Literal["enter", "exit"]
 
-def check_alerts(conn: sqlite3.Connection, moved_device_ids: set[str]) -> None:
+
+@dataclass(frozen=True)
+class AlertState:
+    """Whether the device was last seen inside the alert's radius, and when the alert may next fire."""
+
+    inside: bool
+    cooldown_until: datetime | None
+
+    @classmethod
+    def from_row(cls, alert: sqlite3.Row) -> "AlertState":
+        triggered_at = alert["triggered_at"]
+        cooldown_until = (
+            None
+            if triggered_at is None
+            else datetime.fromisoformat(triggered_at) + timedelta(seconds=ALERT_COOLDOWN_S)
+        )
+        return cls(inside=bool(alert["is_active"]), cooldown_until=cooldown_until)
+
+    def cooldown_elapsed(self, now: datetime) -> bool:
+        return self.cooldown_until is None or now >= self.cooldown_until
+
+
+@dataclass(frozen=True)
+class Transition:
+    state: AlertState
+    notify: bool
+
+
+def next_state(state: AlertState, inside: bool, now: datetime, *, alert_type: RadiusAlertType) -> Transition:
+    """Advance an `enter`/`exit` alert on a new fix that is `inside` its radius or not."""
+    if inside == state.inside:
+        return Transition(state, notify=False)
+    if inside != (alert_type == "enter"):
+        return Transition(replace(state, inside=inside), notify=False)
+    if not state.cooldown_elapsed(now):
+        return Transition(state, notify=False)
+    return Transition(
+        AlertState(inside=inside, cooldown_until=now + timedelta(seconds=ALERT_COOLDOWN_S)), notify=True
+    )
+
+
+def check_alerts(conn: sqlite3.Connection, moved_device_ids: set[str], now: datetime) -> None:
     """Re-evaluate every alert belonging to a device that just moved."""
-    now = datetime.now(UTC).isoformat()
-
     for device_id in moved_device_ids:
         device_alerts = db.alerts_for_device(conn, device_id)
         if not device_alerts:
@@ -71,52 +116,41 @@ def check_alerts(conn: sqlite3.Connection, moved_device_ids: set[str]) -> None:
 
 
 def _check_movement(
-    conn: sqlite3.Connection, alert: sqlite3.Row, previous: sqlite3.Row | None, current: sqlite3.Row, now: str
+    conn: sqlite3.Connection,
+    alert: sqlite3.Row,
+    previous: sqlite3.Row | None,
+    current: sqlite3.Row,
+    now: datetime,
 ) -> None:
     if previous is None:
         return  # first-ever fix for this device: nothing to compare against
     moved_m = haversine_m(
         previous["latitude"], previous["longitude"], current["latitude"], current["longitude"]
     )
-    if moved_m > alert["threshold_m"] and _cooldown_elapsed(alert, now):
-        db.log_alert_event(conn, alert["id"], now)
+    if moved_m > alert["threshold_m"] and AlertState.from_row(alert).cooldown_elapsed(now):
+        db.log_alert_event(conn, alert["id"], now.isoformat())
         metrics.increment("movement_triggered")
         _notify(alert["id"], lambda: send_movement_alert(alert, moved_m))
 
 
 def _check_radius_crossing(
-    conn: sqlite3.Connection, alert: sqlite3.Row, current: sqlite3.Row, now: str
+    conn: sqlite3.Connection, alert: sqlite3.Row, current: sqlite3.Row, now: datetime
 ) -> None:
-    is_enter = alert["alert_type"] == "enter"
     anchor_lat = alert["anchor_lat"] if alert["anchor_lat"] is not None else HOME_LATITUDE
     anchor_lon = alert["anchor_lon"] if alert["anchor_lon"] is not None else HOME_LONGITUDE
     distance_m = haversine_m(anchor_lat, anchor_lon, current["latitude"], current["longitude"])
     inside = distance_m <= alert["threshold_m"]
-    was_inside = bool(alert["is_active"])
 
-    if inside == was_inside:
-        return
+    state = AlertState.from_row(alert)
+    transition = next_state(state, inside, now, alert_type=alert["alert_type"])
 
-    notifies = inside if is_enter else not inside
-    if not notifies:
-        # The opposite transition for this alert's type: bookkeeping only, so
-        # it's silent, not cooldown-gated, and writes no alert_events row.
-        db.set_alert_active(conn, alert["id"], is_active=inside)
-        return
-
-    if _cooldown_elapsed(alert, now):
-        db.set_alert_active(conn, alert["id"], is_active=inside)
-        db.log_alert_event(conn, alert["id"], now)
+    if transition.state.inside != state.inside:
+        db.set_alert_active(conn, alert["id"], is_active=transition.state.inside)
+    if transition.notify:
+        db.log_alert_event(conn, alert["id"], now.isoformat())
         metrics.increment(f"{alert['alert_type']}_triggered")
-        send = send_enter_alert if is_enter else send_exit_alert
+        send = send_enter_alert if alert["alert_type"] == "enter" else send_exit_alert
         _notify(alert["id"], lambda: send(alert))
-
-
-def _cooldown_elapsed(alert: sqlite3.Row, now: str) -> bool:
-    if alert["triggered_at"] is None:
-        return True
-    elapsed = datetime.fromisoformat(now) - datetime.fromisoformat(alert["triggered_at"])
-    return elapsed.total_seconds() >= ALERT_COOLDOWN_S
 
 
 def _notify(alert_id: int, send: Callable[[], None]) -> None:
