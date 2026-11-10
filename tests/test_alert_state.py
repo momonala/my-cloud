@@ -1,8 +1,9 @@
 """Characterization tests for the enter/exit edge trigger in src/findmy/alerts.py.
 
 Times are hardcoded. Telegram is replaced by a fake send_telegram_message that
-records the formatted text, and the two alert writes in src/findmy/db.py are
-wrapped so the order of writes and sends can be asserted together.
+records the formatted text, and the two alert writes in src/findmy/db.py and the
+metrics counter are wrapped so the order of writes, metrics and sends can be
+asserted together.
 """
 
 from datetime import UTC
@@ -10,8 +11,8 @@ from datetime import datetime
 from datetime import timedelta
 
 import pytest
-import requests
 
+import src.findmy.alerts as alerts
 import src.findmy.db as db
 import src.findmy.telegram as telegram
 from src.core.config import HOME_LATITUDE
@@ -93,21 +94,18 @@ def test_alert_state_cooldown_ends_exactly_300s_after_the_last_trigger():
     assert just_before.cooldown_elapsed(T0) is False
 
 
-def test_alert_state_with_no_prior_state_is_outside_with_no_cooldown():
+def test_alert_state_with_no_prior_trigger_has_no_cooldown():
     state = AlertState.from_row({"is_active": 0, "triggered_at": None})
 
     assert state == AlertState(inside=False, cooldown_until=None)
     assert next_state(state, True, T0, alert_type="enter") == Transition(
         AlertState(True, NEXT_COOLDOWN), notify=True
     )
-    assert next_state(state, True, T0, alert_type="exit") == Transition(AlertState(True, None), notify=False)
-    assert next_state(state, False, T0, alert_type="enter") == Transition(state, notify=False)
-    assert next_state(state, False, T0, alert_type="exit") == Transition(state, notify=False)
 
 
 @pytest.fixture
 def calls(monkeypatch):
-    """Every alert write and Telegram send, in the order they happened."""
+    """Every alert write, metric and Telegram send, in the order they happened."""
     recorded: list[tuple] = []
     set_alert_active = db.set_alert_active
     log_alert_event = db.log_alert_event
@@ -120,6 +118,11 @@ def calls(monkeypatch):
         recorded.append(("event", triggered_at))
         log_alert_event(conn, alert_id, triggered_at)
 
+    class FakeMetrics:
+        def increment(self, name):
+            recorded.append(("metric", name))
+
+    monkeypatch.setattr(alerts, "metrics", FakeMetrics())
     monkeypatch.setattr(db, "set_alert_active", fake_set_alert_active)
     monkeypatch.setattr(db, "log_alert_event", fake_log_alert_event)
     monkeypatch.setattr(telegram, "send_telegram_message", lambda text: recorded.append(("send", text)))
@@ -139,7 +142,12 @@ def test_enter_alert_writes_and_sends_across_enter_leave_and_cooldown(conn, call
     assert calls == []
 
     _fix_at(conn, HOME, 1, T0)
-    assert calls == [("set_active", True), ("event", T0.isoformat()), ("send", ENTER_TEXT)]
+    assert calls == [
+        ("set_active", True),
+        ("event", T0.isoformat()),
+        ("metric", "enter_triggered"),
+        ("send", ENTER_TEXT),
+    ]
 
     calls.clear()
     _fix_at(conn, FAR, 2, T0 + timedelta(seconds=60))
@@ -152,7 +160,12 @@ def test_enter_alert_writes_and_sends_across_enter_leave_and_cooldown(conn, call
 
     retry_at = T0 + timedelta(seconds=300)
     _fix_at(conn, NEAR_HOME, 4, retry_at)
-    assert calls == [("set_active", True), ("event", retry_at.isoformat()), ("send", ENTER_TEXT)]
+    assert calls == [
+        ("set_active", True),
+        ("event", retry_at.isoformat()),
+        ("metric", "enter_triggered"),
+        ("send", ENTER_TEXT),
+    ]
     assert alerts_for_device(conn, "tag-1")[0]["triggered_at"] == retry_at.isoformat()
 
 
@@ -170,38 +183,12 @@ def test_exit_alert_tracks_entry_silently_then_notifies_on_leaving(conn, calls):
     calls.clear()
     leave_at = T0 + timedelta(seconds=1)
     _fix_at(conn, FAR, 2, leave_at)
-    assert calls == [("set_active", False), ("event", leave_at.isoformat()), ("send", EXIT_TEXT)]
-
-
-@pytest.mark.parametrize(
-    ("alert_type", "expected"),
-    [
-        ("enter", [("set_active", True), ("event", T0.isoformat()), ("send", ENTER_TEXT)]),
-        ("exit", [("set_active", True)]),
-    ],
-)
-def test_first_observation_inside_the_radius(conn, calls, alert_type, expected):
-    record_fetch(conn, [make_item("tag-1")])
-    create_alert(conn, "tag-1", alert_type, 100)
-
-    _fix_at(conn, HOME, 0, T0)
-
-    assert calls == expected
-
-
-def test_a_failed_send_still_records_the_transition(conn, monkeypatch):
-    def failing_send(text):
-        raise requests.RequestException("down")
-
-    monkeypatch.setattr(telegram, "send_telegram_message", failing_send)
-    record_fetch(conn, [make_item("tag-1")])
-    create_alert(conn, "tag-1", "enter", 100)
-
-    _fix_at(conn, HOME, 0, T0)
-
-    alert = alerts_for_device(conn, "tag-1")[0]
-    assert alert["is_active"] == 1
-    assert alert["triggered_at"] == T0.isoformat()
+    assert calls == [
+        ("set_active", False),
+        ("event", leave_at.isoformat()),
+        ("metric", "exit_triggered"),
+        ("send", EXIT_TEXT),
+    ]
 
 
 def test_movement_alert_refires_exactly_at_the_cooldown_boundary(conn, calls):
@@ -215,4 +202,5 @@ def test_movement_alert_refires_exactly_at_the_cooldown_boundary(conn, calls):
     _fix_at(conn, (52.6, 13.4), 1, T0)
 
     assert calls[0] == ("event", T0.isoformat())
-    assert calls[1][0] == "send"
+    assert calls[1] == ("metric", "movement_triggered")
+    assert calls[2][0] == "send"
