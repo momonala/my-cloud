@@ -22,13 +22,18 @@ _TRUNCATION_SUFFIX = "\n...(truncated)"
 # Prefix for a device with no custom marker set (src/findmy/db.py's device_icons
 # table), so every alert stays visually scannable in the chat.
 DEFAULT_ALERT_ICON = "📍"
+TELEGRAM_TIMEOUT_S = 10
+
+
+class TelegramSendError(Exception):
+    """A failed send, described without the request URL (it embeds the bot token)."""
 
 
 def send_telegram_message(text: str) -> None:
     """Send a Markdown message to the configured Telegram chat.
 
     A no-op (aside from a warning log) if Telegram isn't configured. Raises
-    requests.RequestException if the Telegram API request fails.
+    TelegramSendError if the Telegram API request fails.
     """
     if not TELEGRAM_API_TOKEN or not TELEGRAM_CHAT_ID:
         metrics.increment("telegram_skipped")
@@ -38,15 +43,20 @@ def send_telegram_message(text: str) -> None:
         )
         return
 
-    response = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_API_TOKEN}/sendMessage",
-        data={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": _fit_telegram_length(text),
-            "parse_mode": "Markdown",
-        },
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_API_TOKEN}/sendMessage",
+            data={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": _fit_telegram_length(text),
+                "parse_mode": "Markdown",
+            },
+            timeout=TELEGRAM_TIMEOUT_S,
+        )
+    except requests.RequestException as e:
+        raise TelegramSendError(f"Telegram request failed: {type(e).__name__}") from None
+    if not response.ok:
+        raise TelegramSendError(f"Telegram API returned {response.status_code}: {response.text}")
 
 
 def _alert_prefix(alert: sqlite3.Row) -> str:

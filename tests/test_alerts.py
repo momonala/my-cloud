@@ -7,14 +7,13 @@ from datetime import datetime
 from datetime import timedelta
 from unittest.mock import patch
 
-import requests
-
 from src.core.config import HOME_LATITUDE
 from src.core.config import HOME_LONGITUDE
 from src.findmy.alerts import check_alerts
 from src.findmy.db import alerts_for_device
 from src.findmy.db import create_alert
 from src.findmy.db import record_fetch
+from src.findmy.telegram import TelegramSendError
 from tests.conftest import make_item
 from tests.conftest import make_location
 from tests.conftest import minutes_later
@@ -91,7 +90,7 @@ def test_enter_alert_measures_from_a_custom_anchor_not_home(conn):
     assert alerts_for_device(conn, "tag-1")[0]["is_active"] == 1
 
 
-@patch("src.findmy.alerts.send_movement_alert", side_effect=requests.RequestException("down"))
+@patch("src.findmy.alerts.send_movement_alert", side_effect=TelegramSendError("down"))
 def test_a_failed_telegram_send_does_not_stop_the_rest_of_the_cycle(mock_send, conn):
     record_fetch(
         conn, [make_item("tag-1", make_location(52.5, 13.4)), make_item("tag-2", make_location(52.5, 13.4))]

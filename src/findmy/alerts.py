@@ -34,12 +34,11 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Literal
 
-import requests
-
 import src.findmy.db as db
 from src.core.config import HOME_LATITUDE
 from src.core.config import HOME_LONGITUDE
 from src.core.telemetry import metrics
+from src.findmy.telegram import TelegramSendError
 from src.findmy.telegram import send_enter_alert
 from src.findmy.telegram import send_exit_alert
 from src.findmy.telegram import send_movement_alert
@@ -158,6 +157,6 @@ def _notify(alert_id: int, send: Callable[[], None]) -> None:
     rest of this cycle's alerts from being evaluated and recorded in-app."""
     try:
         send()
-    except requests.RequestException:
+    except TelegramSendError as e:
         metrics.increment("telegram_failed")
-        logger.warning("Telegram notification failed for alert %s", alert_id, exc_info=True)
+        logger.warning("Telegram notification failed for alert %s: %s", alert_id, e)

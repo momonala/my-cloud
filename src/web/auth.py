@@ -5,6 +5,8 @@ interface `mycloud serve` binds by default. Set API_WRITE_TOKEN in .env before
 exposing the app on a network or through a tunnel.
 """
 
+import hmac
+
 from flask import abort
 from flask import request
 
@@ -15,5 +17,5 @@ def require_write_token() -> None:
     """Abort 401 unless the request carries the configured token, if any."""
     if not API_WRITE_TOKEN:
         return
-    if request.headers.get("X-Api-Token") != API_WRITE_TOKEN:
+    if not hmac.compare_digest(request.headers.get("X-Api-Token", "").encode(), API_WRITE_TOKEN.encode()):
         abort(401, description="Missing or invalid X-Api-Token header.")
