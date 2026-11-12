@@ -62,7 +62,7 @@ def send_telegram_message(text: str) -> None:
 def _alert_prefix(alert: sqlite3.Row) -> str:
     """The alerted device's marker emoji and name, as every message opens."""
     icon = alert["device_icon"] or DEFAULT_ALERT_ICON
-    return f"{icon} *{_escape_markdown(alert['device_name'])}*"
+    return f"{_escape_markdown(icon)} {_bold(alert['device_name'])}"
 
 
 def send_movement_alert(alert: sqlite3.Row, moved_m: float) -> None:
@@ -91,7 +91,16 @@ def _fit_telegram_length(text: str) -> str:
 
 
 def _escape_markdown(text: str) -> str:
-    """Escape special characters for Telegram legacy Markdown."""
-    for char in ("*", "`", "["):
+    """Escape special characters for Telegram legacy Markdown, outside an entity."""
+    for char in ("_", "*", "`", "["):
         text = text.replace(char, "\\" + char)
     return text
+
+
+def _bold(text: str) -> str:
+    """Wrap text in a legacy-Markdown bold entity.
+
+    Escapes don't work inside an entity, so a literal `*` closes the bold, is
+    emitted escaped, and reopens it; `_`, `` ` `` and `[` are literal in there.
+    """
+    return "*" + text.replace("*", "*\\**") + "*"

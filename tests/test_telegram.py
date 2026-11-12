@@ -83,9 +83,15 @@ def test_send_telegram_message_raises_api_errors_with_status_and_description(moc
 def test_send_movement_alert_formats_name_and_distance(mock_send):
     send_movement_alert(_alert(), 250.4)
     message = mock_send.call_args.args[0]
-    assert "Steve's \\*Keys\\*" in message
+    assert message.startswith("📍 *Steve's *\\**Keys*\\*** moved")
     assert "250m" in message
     assert "100m" in message
+
+
+@patch("src.findmy.telegram.send_telegram_message")
+def test_send_movement_alert_escapes_underscores_outside_the_bold_name(mock_send):
+    send_movement_alert(_alert(device_name="my_tag", device_icon="_x_"), 250.4)
+    assert mock_send.call_args.args[0].startswith("\\_x\\_ *my_tag* moved")
 
 
 @patch("src.findmy.telegram.send_telegram_message")
