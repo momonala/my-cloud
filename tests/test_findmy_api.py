@@ -13,8 +13,8 @@ import pytest
 
 import src.web.auth as auth
 import src.web.findmy.api as findmy_api
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from tests.conftest import make_item
 from tests.conftest import make_location
 from tests.conftest import minutes_later

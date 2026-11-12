@@ -8,6 +8,9 @@ from src.core.paths import REPO_ROOT
 
 load_dotenv(REPO_ROOT / ".env")
 
+HOME_LATITUDE = float(os.environ["HOME_LATITUDE"])
+HOME_LONGITUDE = float(os.environ["HOME_LONGITUDE"])
+
 ICLOUD_USERNAME = os.environ.get("ICLOUD_USERNAME", "")
 ICLOUD_PASSWORD = os.environ.get("ICLOUD_PASSWORD", "")
 

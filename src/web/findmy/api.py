@@ -13,9 +13,9 @@ from flask import jsonify
 from flask import request
 from flask.typing import ResponseReturnValue
 
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
 from src.core.db import connection
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.core.env import TELEGRAM_API_TOKEN
 from src.core.env import TELEGRAM_CHAT_ID
 from src.findmy.db import all_latest_locations

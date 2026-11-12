@@ -17,8 +17,8 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.core.env import ICLOUD_PASSWORD
 from src.core.env import ICLOUD_USERNAME
 from src.core.errors import MissingCredentialsError

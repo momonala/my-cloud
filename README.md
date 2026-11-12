@@ -28,18 +28,11 @@ Last Updated: 2026-09-04
 
 ### Non-Secret Configuration (Version Controlled)
 
-`pyproject.toml` under `[tool.config]`. `home_latitude`/`home_longitude` are the reference point every reported
-distance is measured from. Five decimal places is ~1m of latitude, which is all the resolution this needs.
-
-```toml
-[tool.config]
-home_latitude = 52.52000
-home_longitude = 13.40500
-```
+`pyproject.toml` under `[tool.config]`.
 
 ```bash
 uv run config --all
-uv run config --home-latitude
+uv run config --flask-port
 ```
 
 ### Secret Configuration (Git-Ignored)
@@ -47,9 +40,13 @@ uv run config --home-latitude
 Copy `.env.example` to `.env`:
 
 ```
+HOME_LATITUDE=52.52000
+HOME_LONGITUDE=13.40500
 ICLOUD_USERNAME=you@example.com
 ICLOUD_PASSWORD='your-password'
 ```
+
+`HOME_LATITUDE`/`HOME_LONGITUDE` are the reference point every reported distance is measured from. Both are required; the app won't start without them.
 
 Quote the password — `python-dotenv` treats an unquoted `#` as a comment and silently truncates the value.
 

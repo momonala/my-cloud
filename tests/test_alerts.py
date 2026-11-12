@@ -7,8 +7,8 @@ from datetime import datetime
 from datetime import timedelta
 from unittest.mock import patch
 
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.findmy.alerts import check_alerts
 from src.findmy.db import alerts_for_device
 from src.findmy.db import create_alert

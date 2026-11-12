@@ -25,8 +25,6 @@ except (OSError, KeyError) as error:  # pragma: no cover - only on a broken chec
 
 PROJECT_NAME = _project_config["name"]
 PROJECT_VERSION = _project_config["version"]
-HOME_LATITUDE = _tool_config["home_latitude"]
-HOME_LONGITUDE = _tool_config["home_longitude"]
 FLASK_PORT = _tool_config["flask_port"]
 SPYGLASS_HOST = _tool_config["spyglass_host"]
 SPYGLASS_DASHBOARD_URL = _tool_config["spyglass_dashboard_url"]
@@ -51,7 +49,7 @@ def config_cli(
 ) -> None:
     """Print non-secret configuration from pyproject.toml.
 
-    Pass a key as either `--home-latitude` or `home_latitude`. Run with --all
+    Pass a key as either `--flask-port` or `flask_port`. Run with --all
     to see every available key.
     """
     if show_all:

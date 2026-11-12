@@ -12,8 +12,8 @@ from datetime import timedelta
 
 import pytest
 
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.findmy.tracking import Location
 from src.findmy.tracking import distance_from_home_m
 from src.findmy.tracking import minutes_ago

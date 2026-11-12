@@ -15,8 +15,8 @@ import pytest
 import src.findmy.alerts as alerts
 import src.findmy.db as db
 import src.findmy.telegram as telegram
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.findmy.alerts import AlertState
 from src.findmy.alerts import Transition
 from src.findmy.alerts import check_alerts

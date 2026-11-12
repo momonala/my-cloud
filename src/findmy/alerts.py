@@ -35,8 +35,8 @@ from datetime import timedelta
 from typing import Literal
 
 import src.findmy.db as db
-from src.core.config import HOME_LATITUDE
-from src.core.config import HOME_LONGITUDE
+from src.core.env import HOME_LATITUDE
+from src.core.env import HOME_LONGITUDE
 from src.core.telemetry import metrics
 from src.findmy.telegram import TelegramSendError
 from src.findmy.telegram import send_enter_alert
